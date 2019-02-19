@@ -1,0 +1,100 @@
+//----HEADER FILE--------------------------//
+#include <stdio.h>
+#include<math.h>
+#include <sys/time.h> 
+#include<time.h>
+#include <stdlib.h>
+#include <cuda.h> 
+#include <cuda_runtime.h> 
+//---------------------------------------//
+#define NUM 10240
+#define BLOCK_SIZE 128 
+#define RADIUS 2
+//---------------------------------------//
+__global__ void stencil_1d(int *in, int *out) {
+	__shared__ int temp[BLOCK_SIZE + 2 * RADIUS];
+    int gindex = threadIdx.x + (blockIdx.x * blockDim.x) + RADIUS;
+    int lindex = threadIdx.x + RADIUS;
+    temp[lindex] = in[gindex];
+    
+	if (threadIdx.x < RADIUS) 
+    {
+      temp[lindex - RADIUS] = in[gindex - RADIUS];
+      temp[lindex + BLOCK_SIZE] = in[gindex + BLOCK_SIZE];
+    }
+    __syncthreads();//to avoid race condition and bank conflicts in shred memory
+    
+	// Apply the stencil
+    int result = 0;
+    for (int offset = -RADIUS ; offset <= RADIUS ; offset++)
+        result += temp[lindex + offset];
+    
+	// Store the result
+    out[gindex-RADIUS] = result;
+	}
+   //---------------------------------------//
+  int main(int argc, char *argv[]) {
+	int i;
+	struct timeval startc,end;
+  float time1;
+	
+	int * h_in = (int *) malloc(sizeof(int) * NUM + 2 * RADIUS);
+	int * h_out = (int *) malloc(sizeof(int) * NUM);
+	int *d_in, *d_out;
+	// Initialize host data
+	for(i = 0; i < (NUM + 2*RADIUS); i++ ) {
+		h_in[i] = 1; // With a value of 1 and RADIUS of 2, all output values should be 5
+	}
+	cudaEvent_t start1,stop1;
+	
+	// Allocate space on the device
+	cudaCheck(cudaMalloc( &d_in, (NUM + 2*RADIUS) * sizeof(int)));
+	cudaCheck(cudaMalloc( &d_out, NUM * sizeof(int))) ;
+	cudaCheck(cudaMemcpy( d_in, h_in, (NUM + 2*RADIUS) * sizeof(int), cudaMemcpyHostToDevice));
+
+	cudaEventCreate(&start1);
+  cudaEventCreate(&stop1);	
+	cudaEventRecord(start1, 0);
+	stencil_1d<<< (NUM + BLOCK_SIZE - 1)/BLOCK_SIZE, BLOCK_SIZE >>> (d_in, d_out);
+  cudaEventRecord(stop1, 0);
+  cudaEventSynchronize(stop1);	
+	cudaCheck(cudaPeekAtLastError());
+  cudaEventElapsedTime(&time1, start1, stop1);
+
+	cudaCheck(cudaMemcpy(h_out, d_out, NUM * sizeof(int), cudaMemcpyDeviceToHost));	
+
+	printf("=============================================\n");
+	printf(" 1D Stencil in GPU \n");
+	printf("=============================================\n");
+	printf("Value of N= %d radius=%d Time Taken in usec= %g\n",RADIUS,NUM,(time1));
+	printf("=============================================\n");
+	
+	//CPU CODE
+	float time,seconds,useconds;	
+	int j;
+	int result = 0;
+  gettimeofday(&startc, NULL);
+	for(j=RADIUS; j<(NUM+RADIUS); j++)
+	{
+	for(i=-RADIUS; i<=RADIUS; i++) 
+	{
+		result += h_in[j + i];
+	}	
+		h_out[j-RADIUS] = result;
+		result = 0;
+	}
+    gettimeofday(&end, NULL);
+    seconds=end.tv_sec - startc.tv_sec;
+    useconds=end.tv_usec - startc.tv_usec;
+    time = seconds*1000 + useconds/1000;    
+	
+	printf("=============================================\n");
+	printf("---------------- 1D stencil in CPU------------\n");
+	printf("Value of N = %d radius=%d Time Taken in usec = %f \n",RADIUS,NUM,(time));
+	printf("=============================================\n");
+	// Free out memory
+  cudaFree(d_in);
+	cudaFree(d_out);
+	return 0;
+}
+
