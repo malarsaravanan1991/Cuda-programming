@@ -1,4 +1,4 @@
-# Cuda-programming
+# Cuda-programming - Vector addition
 Problem 1:
 1.Write and compile an example of “Vector Add”  both for CPU and GPU. Use argument N as the length of the vectors. Compare to the performance of CPU and GPU over the increasing value of N (1K, 10K, 100K, 1M, and 10M). Measure the execution time for CPU and GPU and show that how the CPU and GPU performance and relative GPU over CPU speedup scale with increasing job size (N as the length of array). When measuring the performance only focus on the kernel execution time and ignore the time for transferring the data between CPU and GPU. Make sure to elaborate your results.
 
